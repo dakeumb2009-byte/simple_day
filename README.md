@@ -1,16 +1,22 @@
-# simple_day
+# Simple Day
 
-A new Flutter project.
+Simple Day — минималистичное приложение для планирования задач на каждый день.
 
-## Getting Started
+## 🚀 Возможности
+- 📅 Автоматическая работа с датами
+- ✅ Список задач на каждый день
+- 🔔 Уведомления для важных задач
+- 📊 Приоритеты (high / medium / low)
+- 🌐 Работает в браузере (Flutter Web)
 
-This project is a starting point for a Flutter application.
+## 🌍 Онлайн версия
+👉 https://dakeumb2009-byte.github.io/simple_day/
 
-A few resources to get you started if this is your first Flutter project:
+## 🛠 Технологии
+- Flutter
+- Dart
+- Flutter Web
+- GitHub Pages
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 📌 Статус
+Проект в активной разработке.
