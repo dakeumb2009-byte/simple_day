@@ -29,6 +29,7 @@ class SimpleDayApp extends StatelessWidget {
   }
 }
 
+// Enum для приоритетов
 enum TaskPriority { high, medium, low }
 
 class NotificationService {
@@ -48,16 +49,16 @@ class NotificationService {
   }
 
   Future<void> showNotification(String title, String body) async {
-    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
       'high_priority_channel',
       'High Priority Tasks',
       importance: Importance.max,
       priority: Priority.high,
+      ticker: 'ticker',
     );
-
-    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
-
-    await flutterLocalNotificationsPlugin.show(0, title, body, platformDetails);
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    await flutterLocalNotificationsPlugin.show(0, title, body, details);
   }
 }
 
@@ -86,12 +87,14 @@ class _TodayScreenState extends State<TodayScreen> {
   Future<void> loadTasks() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString('tasksByDate');
-    if (raw != null) {
-      final decoded = jsonDecode(raw) as Map<String, dynamic>;
-      setState(() {
-        tasksByDate = decoded.map((k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)));
-      });
-    }
+    if (raw == null) return;
+
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    setState(() {
+      tasksByDate = decoded.map(
+        (key, value) => MapEntry(key, List<Map<String, dynamic>>.from(value)),
+      );
+    });
   }
 
   Future<void> saveTasks() async {
@@ -100,18 +103,18 @@ class _TodayScreenState extends State<TodayScreen> {
   }
 
   void addTask(String title, String category, TaskPriority priority) {
-    if (title.trim().isEmpty) return;
     final dayTasks = tasksByDate[selectedKey] ?? [];
     setState(() {
       dayTasks.add({
-        'title': title.trim(),
+        'title': title,
         'category': category,
         'priority': priority.index,
-        'done': false
+        'done': false,
       });
       tasksByDate[selectedKey] = dayTasks;
     });
     saveTasks();
+
     if (priority == TaskPriority.high) {
       NotificationService().showNotification('Важная задача', '$title ($category)');
     }
@@ -119,7 +122,8 @@ class _TodayScreenState extends State<TodayScreen> {
 
   void toggleTask(int index) {
     setState(() {
-      tasksByDate[selectedKey]![index]['done'] = !tasksByDate[selectedKey]![index]['done'];
+      tasksByDate[selectedKey]![index]['done'] =
+          !tasksByDate[selectedKey]![index]['done'];
     });
     saveTasks();
   }
@@ -152,6 +156,7 @@ class _TodayScreenState extends State<TodayScreen> {
       dayTasks = dayTasks.where((t) => t['category'] == filterCategory).toList();
     }
     dayTasks.sort((a, b) => b['priority'].compareTo(a['priority']));
+
     final dayLabel = DateFormat('dd MMMM yyyy', 'ru').format(selectedDate);
 
     return Scaffold(
@@ -194,7 +199,11 @@ class _TodayScreenState extends State<TodayScreen> {
                   final isSelected = filterCategory == cat;
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: ChoiceChip(label: Text(cat), selected: isSelected, onSelected: (_) => setState(() => filterCategory = cat)),
+                    child: ChoiceChip(
+                      label: Text(cat),
+                      selected: isSelected,
+                      onSelected: (_) => setState(() => filterCategory = cat),
+                    ),
                   );
                 }).toList(),
               ),
@@ -255,12 +264,12 @@ class _TodayScreenState extends State<TodayScreen> {
                   TextField(
                     controller: controller,
                     autofocus: true,
+                    decoration: const InputDecoration(hintText: 'Название задачи'),
                     onSubmitted: (_) {
-                      addTask(controller.text, selectedCategory, selectedPriority);
+                      addTask(controller.text.trim(), selectedCategory, selectedPriority);
                       controller.clear();
                       Navigator.pop(context);
                     },
-                    decoration: const InputDecoration(hintText: 'Название задачи'),
                   ),
                   const SizedBox(height: 10),
                   DropdownButton<String>(
@@ -281,7 +290,7 @@ class _TodayScreenState extends State<TodayScreen> {
                   const SizedBox(height: 12),
                   ElevatedButton(
                     onPressed: () {
-                      addTask(controller.text, selectedCategory, selectedPriority);
+                      addTask(controller.text.trim(), selectedCategory, selectedPriority);
                       controller.clear();
                       Navigator.pop(context);
                     },
