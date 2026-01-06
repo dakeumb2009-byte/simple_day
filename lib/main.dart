@@ -1,7 +1,14 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeDateFormatting('ru', null);
+  await NotificationService().init();
   runApp(const SimpleDayApp());
 }
 
@@ -11,156 +18,218 @@ class SimpleDayApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Simple Day',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
+        brightness: Brightness.light,
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.grey[100],
       ),
-      home: const HomePage(),
+      home: const TodayScreen(),
     );
   }
 }
 
-/// ---------------- HOME PAGE ----------------
+enum TaskPriority { high, medium, low }
 
-class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+class NotificationService {
+  static final NotificationService _instance = NotificationService._internal();
+  factory NotificationService() => _instance;
+  NotificationService._internal();
 
-  @override
-  State<HomePage> createState() => _HomePageState();
+  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+      FlutterLocalNotificationsPlugin();
+
+  Future<void> init() async {
+    const AndroidInitializationSettings androidSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const InitializationSettings initSettings =
+        InitializationSettings(android: androidSettings);
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
+  }
+
+  Future<void> showNotification(String title, String body) async {
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'high_priority_channel',
+      'High Priority Tasks',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails platformDetails = NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(0, title, body, platformDetails);
+  }
 }
 
-class _HomePageState extends State<HomePage> {
-  final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+class TodayScreen extends StatefulWidget {
+  const TodayScreen({super.key});
 
-  final List<Task> _tasks = [];
+  @override
+  State<TodayScreen> createState() => _TodayScreenState();
+}
 
-  /// текущая дата
-  String get today {
-    return DateFormat('EEEE, d MMMM', 'en_US').format(DateTime.now());
+class _TodayScreenState extends State<TodayScreen> {
+  final TextEditingController controller = TextEditingController();
+  Map<String, List<Map<String, dynamic>>> tasksByDate = {};
+  DateTime selectedDate = DateTime.now();
+  String filterCategory = 'Все';
+  final List<String> categories = ['Все', 'Работа', 'Учёба', 'Личное', 'Покупки'];
+
+  String get selectedKey => DateFormat('yyyy-MM-dd').format(selectedDate);
+
+  @override
+  void initState() {
+    super.initState();
+    loadTasks();
   }
 
-  /// добавление задачи
-  void _addTask() {
-    final text = _controller.text.trim();
-    if (text.isEmpty) return;
+  Future<void> loadTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('tasksByDate');
+    if (raw != null) {
+      final decoded = jsonDecode(raw) as Map<String, dynamic>;
+      setState(() {
+        tasksByDate = decoded.map((k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)));
+      });
+    }
+  }
 
+  Future<void> saveTasks() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('tasksByDate', jsonEncode(tasksByDate));
+  }
+
+  void addTask(String title, String category, TaskPriority priority) {
+    if (title.trim().isEmpty) return;
+    final dayTasks = tasksByDate[selectedKey] ?? [];
     setState(() {
-      _tasks.add(Task(title: text));
+      dayTasks.add({
+        'title': title.trim(),
+        'category': category,
+        'priority': priority.index,
+        'done': false
+      });
+      tasksByDate[selectedKey] = dayTasks;
     });
-
-    _controller.clear();
-    _focusNode.requestFocus();
+    saveTasks();
+    if (priority == TaskPriority.high) {
+      NotificationService().showNotification('Важная задача', '$title ($category)');
+    }
   }
 
-  /// количество выполненных
-  int get completedCount {
-    return _tasks.where((t) => t.done).length;
+  void toggleTask(int index) {
+    setState(() {
+      tasksByDate[selectedKey]![index]['done'] = !tasksByDate[selectedKey]![index]['done'];
+    });
+    saveTasks();
+  }
+
+  void deleteTask(int index) {
+    setState(() {
+      tasksByDate[selectedKey]!.removeAt(index);
+    });
+    saveTasks();
+  }
+
+  void previousDay() => setState(() => selectedDate = selectedDate.subtract(const Duration(days: 1)));
+  void nextDay() => setState(() => selectedDate = selectedDate.add(const Duration(days: 1)));
+
+  Color priorityColor(int index) {
+    switch (TaskPriority.values[index]) {
+      case TaskPriority.high:
+        return Colors.red;
+      case TaskPriority.medium:
+        return Colors.orange;
+      case TaskPriority.low:
+        return Colors.green;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    List<Map<String, dynamic>> dayTasks = tasksByDate[selectedKey] ?? [];
+    if (filterCategory != 'Все') {
+      dayTasks = dayTasks.where((t) => t['category'] == filterCategory).toList();
+    }
+    dayTasks.sort((a, b) => b['priority'].compareTo(a['priority']));
+    final dayLabel = DateFormat('dd MMMM yyyy', 'ru').format(selectedDate);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Simple Day'),
-        centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.calendar_today),
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDate,
+                firstDate: DateTime(2000),
+                lastDate: DateTime(2100),
+                locale: const Locale('ru'),
+              );
+              if (picked != null) setState(() => selectedDate = picked);
+            },
+          ),
+        ],
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           children: [
-
-            /// -------- DATE --------
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                today,
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            /// -------- INPUT --------
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    focusNode: _focusNode,
-                    onSubmitted: (_) => _addTask(), // ENTER
-                    decoration: const InputDecoration(
-                      hintText: 'Add new task...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.add_circle, size: 32),
-                  onPressed: _addTask,
-                ),
+                IconButton(icon: const Icon(Icons.arrow_back), onPressed: previousDay),
+                Text(dayLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                IconButton(icon: const Icon(Icons.arrow_forward), onPressed: nextDay),
               ],
             ),
-
-            const SizedBox(height: 16),
-
-            /// -------- COUNTER --------
-            Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Completed: $completedCount / ${_tasks.length}',
-                style: TextStyle(
-                  color: Colors.grey[700],
-                ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 40,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: categories.map((cat) {
+                  final isSelected = filterCategory == cat;
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: ChoiceChip(label: Text(cat), selected: isSelected, onSelected: (_) => setState(() => filterCategory = cat)),
+                  );
+                }).toList(),
               ),
             ),
-
-            const SizedBox(height: 8),
-
-            /// -------- TASK LIST --------
+            const SizedBox(height: 10),
             Expanded(
-              child: _tasks.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No tasks yet',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                    )
+              child: dayTasks.isEmpty
+                  ? const Center(child: Text('Дел нет'))
                   : ListView.builder(
-                      itemCount: _tasks.length,
+                      itemCount: dayTasks.length,
                       itemBuilder: (context, index) {
-                        final task = _tasks[index];
-                        return Card(
-                          child: ListTile(
-                            leading: Checkbox(
-                              value: task.done,
-                              onChanged: (value) {
-                                setState(() {
-                                  task.done = value ?? false;
-                                });
-                              },
-                            ),
-                            title: Text(
-                              task.title,
-                              style: TextStyle(
-                                decoration: task.done
-                                    ? TextDecoration.lineThrough
-                                    : null,
+                        final task = dayTasks[index];
+                        return Dismissible(
+                          key: Key(task['title'] + index.toString()),
+                          direction: DismissDirection.endToStart,
+                          onDismissed: (_) => deleteTask(index),
+                          background: Container(
+                            color: Colors.red,
+                            alignment: Alignment.centerRight,
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: const Icon(Icons.delete, color: Colors.white),
+                          ),
+                          child: Card(
+                            margin: const EdgeInsets.symmetric(vertical: 6),
+                            child: ListTile(
+                              leading: IconButton(
+                                icon: Icon(
+                                  task['done'] ? Icons.check_circle : Icons.radio_button_unchecked,
+                                  color: task['done'] ? Colors.green : Colors.grey,
+                                ),
+                                onPressed: () => toggleTask(index),
                               ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(Icons.delete),
-                              onPressed: () {
-                                setState(() {
-                                  _tasks.removeAt(index);
-                                });
-                              },
+                              title: Text(task['title']),
+                              subtitle: Text(task['category']),
+                              trailing: CircleAvatar(radius: 8, backgroundColor: priorityColor(task['priority'])),
                             ),
                           ),
                         );
@@ -170,18 +239,60 @@ class _HomePageState extends State<HomePage> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        child: const Icon(Icons.add),
+        onPressed: () {
+          String selectedCategory = categories[1];
+          TaskPriority selectedPriority = TaskPriority.medium;
+
+          showModalBottomSheet(
+            context: context,
+            builder: (_) => Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    onSubmitted: (_) {
+                      addTask(controller.text, selectedCategory, selectedPriority);
+                      controller.clear();
+                      Navigator.pop(context);
+                    },
+                    decoration: const InputDecoration(hintText: 'Название задачи'),
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButton<String>(
+                    value: selectedCategory,
+                    items: categories.where((c) => c != 'Все').map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (value) {
+                      if (value != null) selectedCategory = value;
+                    },
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButton<TaskPriority>(
+                    value: selectedPriority,
+                    items: TaskPriority.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name.toUpperCase()))).toList(),
+                    onChanged: (value) {
+                      if (value != null) selectedPriority = value;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton(
+                    onPressed: () {
+                      addTask(controller.text, selectedCategory, selectedPriority);
+                      controller.clear();
+                      Navigator.pop(context);
+                    },
+                    child: const Text('Добавить'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
     );
   }
-}
-
-/// ---------------- TASK MODEL ----------------
-
-class Task {
-  final String title;
-  bool done;
-
-  Task({
-    required this.title,
-    this.done = false,
-  });
 }

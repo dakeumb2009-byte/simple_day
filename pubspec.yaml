@@ -1,24 +1,32 @@
 name: simple_day
-description: Simple Day — daily task planner built with Flutter Web
-publish_to: 'none'
+description: A daily task planner built with Flutter Web
+publish_to: "none" # Чтобы не публиковать в pub.dev
 
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
   flutter:
     sdk: flutter
 
-  intl: ^0.19.0
-  shared_preferences: ^2.2.2
+  # Пакеты для задач и уведомлений
+  shared_preferences: ^2.1.1
+  intl: ^0.18.1
+  flutter_local_notifications: ^14.1.5
+
+  # Иконки
+  cupertino_icons: ^1.0.5
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  flutter_lints: ^3.0.0
+  flutter_lints: ^2.0.1
 
 flutter:
   uses-material-design: true
+
+  assets:
+    # Если будут картинки или шрифты, можно добавить здесь
+    # - assets/images/
