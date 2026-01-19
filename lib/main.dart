@@ -29,7 +29,6 @@ class SimpleDayApp extends StatelessWidget {
   }
 }
 
-// Enum для приоритетов
 enum TaskPriority { high, medium, low }
 
 class NotificationService {
@@ -55,9 +54,11 @@ class NotificationService {
       'High Priority Tasks',
       importance: Importance.max,
       priority: Priority.high,
-      ticker: 'ticker',
     );
-    const NotificationDetails details = NotificationDetails(android: androidDetails);
+
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
     await flutterLocalNotificationsPlugin.show(0, title, body, details);
   }
 }
@@ -71,12 +72,21 @@ class TodayScreen extends StatefulWidget {
 
 class _TodayScreenState extends State<TodayScreen> {
   final TextEditingController controller = TextEditingController();
+
   Map<String, List<Map<String, dynamic>>> tasksByDate = {};
   DateTime selectedDate = DateTime.now();
   String filterCategory = 'Все';
-  final List<String> categories = ['Все', 'Работа', 'Учёба', 'Личное', 'Покупки'];
 
-  String get selectedKey => DateFormat('yyyy-MM-dd').format(selectedDate);
+  final List<String> categories = [
+    'Все',
+    'Работа',
+    'Учёба',
+    'Личное',
+    'Покупки'
+  ];
+
+  String get selectedKey =>
+      DateFormat('yyyy-MM-dd').format(selectedDate);
 
   @override
   void initState() {
@@ -92,7 +102,8 @@ class _TodayScreenState extends State<TodayScreen> {
     final decoded = jsonDecode(raw) as Map<String, dynamic>;
     setState(() {
       tasksByDate = decoded.map(
-        (key, value) => MapEntry(key, List<Map<String, dynamic>>.from(value)),
+        (key, value) =>
+            MapEntry(key, List<Map<String, dynamic>>.from(value)),
       );
     });
   }
@@ -102,8 +113,12 @@ class _TodayScreenState extends State<TodayScreen> {
     await prefs.setString('tasksByDate', jsonEncode(tasksByDate));
   }
 
-  void addTask(String title, String category, TaskPriority priority) {
+  void addTask(
+      String title, String category, TaskPriority priority) {
+    if (title.isEmpty) return;
+
     final dayTasks = tasksByDate[selectedKey] ?? [];
+
     setState(() {
       dayTasks.add({
         'title': title,
@@ -113,10 +128,12 @@ class _TodayScreenState extends State<TodayScreen> {
       });
       tasksByDate[selectedKey] = dayTasks;
     });
+
     saveTasks();
 
     if (priority == TaskPriority.high) {
-      NotificationService().showNotification('Важная задача', '$title ($category)');
+      NotificationService()
+          .showNotification('Важная задача', title);
     }
   }
 
@@ -135,8 +152,13 @@ class _TodayScreenState extends State<TodayScreen> {
     saveTasks();
   }
 
-  void previousDay() => setState(() => selectedDate = selectedDate.subtract(const Duration(days: 1)));
-  void nextDay() => setState(() => selectedDate = selectedDate.add(const Duration(days: 1)));
+  void previousDay() =>
+      setState(() => selectedDate =
+          selectedDate.subtract(const Duration(days: 1)));
+
+  void nextDay() =>
+      setState(() => selectedDate =
+          selectedDate.add(const Duration(days: 1)));
 
   Color priorityColor(int index) {
     switch (TaskPriority.values[index]) {
@@ -151,13 +173,20 @@ class _TodayScreenState extends State<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    List<Map<String, dynamic>> dayTasks = tasksByDate[selectedKey] ?? [];
-    if (filterCategory != 'Все') {
-      dayTasks = dayTasks.where((t) => t['category'] == filterCategory).toList();
-    }
-    dayTasks.sort((a, b) => b['priority'].compareTo(a['priority']));
+    List<Map<String, dynamic>> dayTasks =
+        tasksByDate[selectedKey] ?? [];
 
-    final dayLabel = DateFormat('dd MMMM yyyy', 'ru').format(selectedDate);
+    if (filterCategory != 'Все') {
+      dayTasks = dayTasks
+          .where((t) => t['category'] == filterCategory)
+          .toList();
+    }
+
+    dayTasks.sort(
+        (a, b) => b['priority'].compareTo(a['priority']));
+
+    final dayLabel =
+        DateFormat('dd MMMM yyyy', 'ru').format(selectedDate);
 
     return Scaffold(
       appBar: AppBar(
@@ -173,7 +202,9 @@ class _TodayScreenState extends State<TodayScreen> {
                 lastDate: DateTime(2100),
                 locale: const Locale('ru'),
               );
-              if (picked != null) setState(() => selectedDate = picked);
+              if (picked != null) {
+                setState(() => selectedDate = picked);
+              }
             },
           ),
         ],
@@ -183,11 +214,20 @@ class _TodayScreenState extends State<TodayScreen> {
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
               children: [
-                IconButton(icon: const Icon(Icons.arrow_back), onPressed: previousDay),
-                Text(dayLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                IconButton(icon: const Icon(Icons.arrow_forward), onPressed: nextDay),
+                IconButton(
+                    icon: const Icon(Icons.arrow_back),
+                    onPressed: previousDay),
+                Text(
+                  dayLabel,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                    icon: const Icon(Icons.arrow_forward),
+                    onPressed: nextDay),
               ],
             ),
             const SizedBox(height: 10),
@@ -196,13 +236,14 @@ class _TodayScreenState extends State<TodayScreen> {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: categories.map((cat) {
-                  final isSelected = filterCategory == cat;
                   return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 4),
                     child: ChoiceChip(
                       label: Text(cat),
-                      selected: isSelected,
-                      onSelected: (_) => setState(() => filterCategory = cat),
+                      selected: filterCategory == cat,
+                      onSelected: (_) =>
+                          setState(() => filterCategory = cat),
                     ),
                   );
                 }).toList(),
@@ -216,29 +257,66 @@ class _TodayScreenState extends State<TodayScreen> {
                       itemCount: dayTasks.length,
                       itemBuilder: (context, index) {
                         final task = dayTasks[index];
-                        return Dismissible(
-                          key: Key(task['title'] + index.toString()),
-                          direction: DismissDirection.endToStart,
-                          onDismissed: (_) => deleteTask(index),
-                          background: Container(
-                            color: Colors.red,
-                            alignment: Alignment.centerRight,
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: const Icon(Icons.delete, color: Colors.white),
-                          ),
-                          child: Card(
-                            margin: const EdgeInsets.symmetric(vertical: 6),
-                            child: ListTile(
-                              leading: IconButton(
-                                icon: Icon(
-                                  task['done'] ? Icons.check_circle : Icons.radio_button_unchecked,
-                                  color: task['done'] ? Colors.green : Colors.grey,
+
+                        return Card(
+                          child: ListTile(
+                            onLongPress: () {
+                              showModalBottomSheet(
+                                context: context,
+                                builder: (_) => SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      ListTile(
+                                        leading: const Icon(
+                                            Icons.delete,
+                                            color: Colors.red),
+                                        title: const Text(
+                                            'Удалить задачу'),
+                                        onTap: () {
+                                          deleteTask(index);
+                                          Navigator.pop(context);
+                                        },
+                                      ),
+                                      ListTile(
+                                        leading:
+                                            const Icon(Icons.close),
+                                        title:
+                                            const Text('Отмена'),
+                                        onTap: () =>
+                                            Navigator.pop(context),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                                onPressed: () => toggleTask(index),
+                              );
+                            },
+                            leading: IconButton(
+                              icon: Icon(
+                                task['done']
+                                    ? Icons.check_circle
+                                    : Icons
+                                        .radio_button_unchecked,
+                                color: task['done']
+                                    ? Colors.green
+                                    : Colors.grey,
                               ),
-                              title: Text(task['title']),
-                              subtitle: Text(task['category']),
-                              trailing: CircleAvatar(radius: 8, backgroundColor: priorityColor(task['priority'])),
+                              onPressed: () =>
+                                  toggleTask(index),
+                            ),
+                            title: Text(
+                              task['title'],
+                              style: TextStyle(
+                                decoration: task['done']
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            subtitle: Text(task['category']),
+                            trailing: CircleAvatar(
+                              radius: 8,
+                              backgroundColor: priorityColor(
+                                  task['priority']),
                             ),
                           ),
                         );
@@ -252,7 +330,8 @@ class _TodayScreenState extends State<TodayScreen> {
         child: const Icon(Icons.add),
         onPressed: () {
           String selectedCategory = categories[1];
-          TaskPriority selectedPriority = TaskPriority.medium;
+          TaskPriority selectedPriority =
+              TaskPriority.medium;
 
           showModalBottomSheet(
             context: context,
@@ -264,33 +343,41 @@ class _TodayScreenState extends State<TodayScreen> {
                   TextField(
                     controller: controller,
                     autofocus: true,
-                    decoration: const InputDecoration(hintText: 'Название задачи'),
-                    onSubmitted: (_) {
-                      addTask(controller.text.trim(), selectedCategory, selectedPriority);
-                      controller.clear();
-                      Navigator.pop(context);
-                    },
+                    decoration: const InputDecoration(
+                        hintText: 'Название задачи'),
                   ),
                   const SizedBox(height: 10),
                   DropdownButton<String>(
                     value: selectedCategory,
-                    items: categories.where((c) => c != 'Все').map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                    onChanged: (value) {
-                      if (value != null) selectedCategory = value;
-                    },
+                    items: categories
+                        .where((c) => c != 'Все')
+                        .map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c),
+                            ))
+                        .toList(),
+                    onChanged: (v) =>
+                        selectedCategory = v!,
                   ),
-                  const SizedBox(height: 10),
                   DropdownButton<TaskPriority>(
                     value: selectedPriority,
-                    items: TaskPriority.values.map((p) => DropdownMenuItem(value: p, child: Text(p.name.toUpperCase()))).toList(),
-                    onChanged: (value) {
-                      if (value != null) selectedPriority = value;
-                    },
+                    items: TaskPriority.values
+                        .map((p) => DropdownMenuItem(
+                              value: p,
+                              child:
+                                  Text(p.name.toUpperCase()),
+                            ))
+                        .toList(),
+                    onChanged: (v) =>
+                        selectedPriority = v!,
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 10),
                   ElevatedButton(
                     onPressed: () {
-                      addTask(controller.text.trim(), selectedCategory, selectedPriority);
+                      addTask(
+                          controller.text.trim(),
+                          selectedCategory,
+                          selectedPriority);
                       controller.clear();
                       Navigator.pop(context);
                     },
