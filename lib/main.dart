@@ -313,11 +313,21 @@ class _TodayScreenState extends State<TodayScreen> {
                               ),
                             ),
                             subtitle: Text(task['category']),
-                            trailing: CircleAvatar(
-                              radius: 8,
-                              backgroundColor: priorityColor(
-                                  task['priority']),
-                            ),
+                            trailing: Row(
+  mainAxisSize: MainAxisSize.min,
+  children: [
+    CircleAvatar(
+      radius: 8,
+      backgroundColor: priorityColor(task['priority']),
+    ),
+    IconButton(
+      icon: const Icon(Icons.delete, color: Colors.red),
+      onPressed: () => deleteTask(index),
+      tooltip: 'Удалить задачу',
+    ),
+  ],
+),
+
                           ),
                         );
                       },
