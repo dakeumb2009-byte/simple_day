@@ -1,263 +1,121 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
-import 'package:intl/date_symbol_data_local.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await initializeDateFormatting('ru', null);
-  await NotificationService.init();
-  runApp(const SimpleDayApp());
+
+  // Инициализация уведомлений
+  await NotificationService().init();
+
+  runApp(const MyApp());
 }
 
-class SimpleDayApp extends StatelessWidget {
-  const SimpleDayApp({super.key});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false,
       title: 'Simple Day',
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const TodayScreen(),
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        useMaterial3: true,
+      ),
+      home: const HomePage(),
     );
   }
 }
 
-enum TaskPriority { high, medium, low }
-
-class TodayScreen extends StatefulWidget {
-  const TodayScreen({super.key});
+class HomePage extends StatefulWidget {
+  const HomePage({super.key});
 
   @override
-  State<TodayScreen> createState() => _TodayScreenState();
+  State<HomePage> createState() => _HomePageState();
 }
 
-class _TodayScreenState extends State<TodayScreen> {
-  final TextEditingController controller = TextEditingController();
-  Map<String, List<Map<String, dynamic>>> tasksByDate = {};
+class _HomePageState extends State<HomePage> {
+  final NotificationService _notificationService = NotificationService();
 
-  DateTime selectedDate = DateTime.now();
-  TimeOfDay? selectedTime;
-  int timerSeconds = 0;
-  bool timerRunning = false;
+  int _notificationId = 0;
 
-  String get keyDate => DateFormat('yyyy-MM-dd').format(selectedDate);
-
-  @override
-  void initState() {
-    super.initState();
-    loadTasks();
+  void _sendTestNotification() async {
+    await _notificationService.showInstantNotification(
+      title: 'Simple Day 👋',
+      body: 'Это тестовое уведомление',
+    );
   }
 
-  Future<void> loadTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('tasks');
-    if (raw == null) return;
+  void _scheduleNotification() async {
+    final DateTime scheduledTime =
+        DateTime.now().add(const Duration(minutes: 1));
 
-    setState(() {
-      tasksByDate = Map<String, List<Map<String, dynamic>>>.from(
-        jsonDecode(raw).map(
-          (k, v) => MapEntry(k, List<Map<String, dynamic>>.from(v)),
-        ),
-      );
-    });
+    await _notificationService.scheduleNotification(
+      id: _notificationId++,
+      title: '⏰ Напоминание',
+      body: 'Пора выполнить задачу',
+      dateTime: scheduledTime,
+    );
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Уведомление поставлено через 1 минуту'),
+      ),
+    );
   }
 
-  Future<void> saveTasks() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('tasks', jsonEncode(tasksByDate));
-  }
+  void _cancelAllNotifications() async {
+    await _notificationService.cancelAll();
 
-  void addTask(String title, TaskPriority priority) {
-    if (title.isEmpty) return;
-
-    final id = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final list = tasksByDate[keyDate] ?? [];
-
-    DateTime? alarmTime;
-    if (selectedTime != null) {
-      alarmTime = DateTime(
-        selectedDate.year,
-        selectedDate.month,
-        selectedDate.day,
-        selectedTime!.hour,
-        selectedTime!.minute,
-      );
-
-      NotificationService.schedule(
-        id: id,
-        title: '⏰ Simple Day',
-        body: title,
-        dateTime: alarmTime,
-      );
-    }
-
-    list.add({
-      'id': id,
-      'title': title,
-      'priority': priority.index,
-      'done': false,
-      'time': selectedTime == null
-          ? null
-          : '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}',
-    });
-
-    setState(() {
-      tasksByDate[keyDate] = list;
-      controller.clear();
-      selectedTime = null;
-    });
-
-    saveTasks();
-  }
-
-  void toggleTask(int index) {
-    setState(() {
-      tasksByDate[keyDate]![index]['done'] =
-          !tasksByDate[keyDate]![index]['done'];
-    });
-    saveTasks();
-  }
-
-  void deleteTask(int index) {
-    setState(() {
-      tasksByDate[keyDate]!.removeAt(index);
-    });
-    saveTasks();
-  }
-
-  Color priorityColor(int i) {
-    switch (TaskPriority.values[i]) {
-      case TaskPriority.high:
-        return Colors.red;
-      case TaskPriority.medium:
-        return Colors.orange;
-      case TaskPriority.low:
-        return Colors.green;
-    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Все уведомления отменены'),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final tasks = tasksByDate[keyDate] ?? [];
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Simple Day'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.timer),
-            onPressed: () {
-              setState(() {
-                timerSeconds = 25 * 60;
-                timerRunning = true;
-              });
-            },
-          ),
-        ],
+        centerTitle: true,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            if (timerRunning)
-              Text(
-                '⏱ ${(timerSeconds ~/ 60).toString().padLeft(2, '0')}:${(timerSeconds % 60).toString().padLeft(2, '0')}',
-                style:
-                    const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            const Text(
+              'Уведомления работают ✅',
+              style: TextStyle(fontSize: 20),
+            ),
+            const SizedBox(height: 24),
+
+            ElevatedButton(
+              onPressed: _sendTestNotification,
+              child: const Text('Показать уведомление сейчас'),
+            ),
+
+            const SizedBox(height: 12),
+
+            ElevatedButton(
+              onPressed: _scheduleNotification,
+              child: const Text('Поставить напоминание (1 мин)'),
+            ),
+
+            const SizedBox(height: 12),
+
+            ElevatedButton(
+              onPressed: _cancelAllNotifications,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
               ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: tasks.length,
-                itemBuilder: (_, i) {
-                  final t = tasks[i];
-                  return Dismissible(
-                    key: Key(t['id'].toString()),
-                    direction: DismissDirection.endToStart,
-                    onDismissed: (_) => deleteTask(i),
-                    background: Container(
-                      color: Colors.red,
-                      alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
-                      child:
-                          const Icon(Icons.delete, color: Colors.white),
-                    ),
-                    child: ListTile(
-                      leading: IconButton(
-                        icon: Icon(
-                          t['done']
-                              ? Icons.check_circle
-                              : Icons.radio_button_unchecked,
-                        ),
-                        onPressed: () => toggleTask(i),
-                      ),
-                      title: Text(t['title']),
-                      subtitle:
-                          t['time'] != null ? Text('⏰ ${t['time']}') : null,
-                      trailing: CircleAvatar(
-                        radius: 6,
-                        backgroundColor:
-                            priorityColor(t['priority']),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              child: const Text('Отменить все уведомления'),
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: const Icon(Icons.add),
-        onPressed: () async {
-          TaskPriority priority = TaskPriority.medium;
-
-          showModalBottomSheet(
-            context: context,
-            builder: (_) => Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    decoration:
-                        const InputDecoration(hintText: 'Задача'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () async {
-                      selectedTime = await showTimePicker(
-                        context: context,
-                        initialTime: TimeOfDay.now(),
-                      );
-                    },
-                    child: const Text('Выбрать время'),
-                  ),
-                  DropdownButton<TaskPriority>(
-                    value: priority,
-                    items: TaskPriority.values
-                        .map((p) => DropdownMenuItem(
-                              value: p,
-                              child: Text(p.name),
-                            ))
-                        .toList(),
-                    onChanged: (v) => priority = v!,
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      addTask(controller.text, priority);
-                      Navigator.pop(context);
-                    },
-                    child: const Text('Добавить'),
-                  )
-                ],
-              ),
-            ),
-          );
-        },
       ),
     );
   }

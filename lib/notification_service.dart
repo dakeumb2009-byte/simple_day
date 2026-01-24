@@ -1,39 +1,97 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tzdata;
+import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _plugin =
+  static final NotificationService _instance =
+      NotificationService._internal();
+
+  factory NotificationService() => _instance;
+
+  NotificationService._internal();
+
+  final FlutterLocalNotificationsPlugin
+      flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  static Future<void> init() async {
-    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
-    const settings = InitializationSettings(android: android);
-    await _plugin.initialize(settings);
+  /// Инициализация
+  Future<void> init() async {
+    // Инициализация таймзон
+    tzdata.initializeTimeZones();
+
+    const AndroidInitializationSettings androidInitSettings =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const InitializationSettings initSettings =
+        InitializationSettings(android: androidInitSettings);
+
+    await flutterLocalNotificationsPlugin.initialize(initSettings);
   }
 
-  static Future<void> schedule({
+  /// Простое уведомление (сразу)
+  Future<void> showInstantNotification({
+    required String title,
+    required String body,
+  }) async {
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'instant_channel',
+      'Мгновенные уведомления',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
+
+    await flutterLocalNotificationsPlugin.show(
+      0,
+      title,
+      body,
+      details,
+    );
+  }
+
+  /// Уведомление по времени (будильник / напоминание)
+  Future<void> scheduleNotification({
     required int id,
     required String title,
     required String body,
     required DateTime dateTime,
   }) async {
-    const androidDetails = AndroidNotificationDetails(
-      'simple_day_channel',
-      'Simple Day Notifications',
+    final tz.TZDateTime scheduledDate =
+        tz.TZDateTime.from(dateTime, tz.local);
+
+    const AndroidNotificationDetails androidDetails =
+        AndroidNotificationDetails(
+      'scheduled_channel',
+      'Запланированные уведомления',
       importance: Importance.max,
       priority: Priority.high,
     );
 
-    const details = NotificationDetails(android: androidDetails);
+    const NotificationDetails details =
+        NotificationDetails(android: androidDetails);
 
-    await _plugin.zonedSchedule(
+    await flutterLocalNotificationsPlugin.zonedSchedule(
       id,
       title,
       body,
-      dateTime.toUtc(),
+      scheduledDate,
       details,
-      androidAllowWhileIdle: true,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
+  }
+
+  /// Отмена конкретного уведомления
+  Future<void> cancelNotification(int id) async {
+    await flutterLocalNotificationsPlugin.cancel(id);
+  }
+
+  /// Отмена ВСЕХ уведомлений
+  Future<void> cancelAll() async {
+    await flutterLocalNotificationsPlugin.cancelAll();
   }
 }
